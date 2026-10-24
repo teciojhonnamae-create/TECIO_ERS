@@ -1,6 +1,6 @@
-package com.eventreservation.ui;
+package com.yourdomain.ui;
 
-import com.eventreservation.dao.UserDao;
+import com.yourdomain.dao.UserDao;
 
 import java.util.Scanner;
 
@@ -8,19 +8,13 @@ public class Menu {
 
     private final Authentication authentication;
 
-    public Menu(
-            UserDao userDao,
-            Scanner scanner
-    ) {
+    public Menu(UserDao userDao, Scanner scanner) {
         this.authentication = new Authentication(
                 userDao,
                 scanner
         );
     }
 
-    /**
-     * Starts the authentication menu.
-     */
     public void start() {
         authentication.start();
     }

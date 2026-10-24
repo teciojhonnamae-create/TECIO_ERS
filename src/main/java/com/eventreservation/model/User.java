@@ -1,4 +1,4 @@
-package com.eventreservation.model;
+package com.yourdomain.model;
 
 public record User(
         int userId,

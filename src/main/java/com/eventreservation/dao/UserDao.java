@@ -1,18 +1,17 @@
-package com.eventreservation.dao;
+package com.yourdomain.dao;
 
-import com.eventreservation.model.User;
+import com.yourdomain.model.User;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class UserDao {
 
-    /**
-     * Checks whether a username already exists.
-     */
     public boolean usernameExists(String username)
             throws SQLException {
 
@@ -36,38 +35,21 @@ public class UserDao {
         }
     }
 
-    /**
-     * Registers a new user with PENDING account status.
-     */
     public void register(
             String fullName,
             String username,
             String password,
-            String role
+            String userRole
     ) throws SQLException {
 
-        if (!isValidRole(role)) {
-            throw new IllegalArgumentException(
-                    "Invalid role. Allowed roles: "
-                            + "ADMIN, CASHIER, EVENT COORDINATOR."
-            );
-        }
-
-        if (password == null || password.length() < 8) {
-            throw new IllegalArgumentException(
-                    "Password must contain at least 8 characters."
-            );
-        }
-
         String sql = """
-                INSERT INTO "user"
-                    (
-                        full_name,
-                        username,
-                        password,
-                        user_role,
-                        account_status
-                    )
+                INSERT INTO "user" (
+                    full_name,
+                    username,
+                    password,
+                    user_role,
+                    account_status
+                )
                 VALUES (?, ?, ?, ?, 'PENDING')
                 """;
 
@@ -79,27 +61,20 @@ public class UserDao {
             ps.setString(1, fullName);
             ps.setString(2, username);
             ps.setString(3, password);
-            ps.setString(4, role);
+            ps.setString(4, userRole);
 
             ps.executeUpdate();
         }
     }
 
-    /**
-     * Authenticates a user using the stored username and password.
-     */
     public Optional<User> login(
             String username,
             String password
     ) throws SQLException {
 
         String sql = """
-                SELECT
-                    user_id,
-                    full_name,
-                    username,
-                    user_role,
-                    account_status
+                SELECT user_id, full_name, username,
+                       user_role, account_status
                 FROM "user"
                 WHERE username = ? COLLATE NOCASE
                   AND password = ?
@@ -117,16 +92,7 @@ public class UserDao {
             try (ResultSet rs = ps.executeQuery()) {
 
                 if (rs.next()) {
-
-                    User user = new User(
-                            rs.getInt("user_id"),
-                            rs.getString("full_name"),
-                            rs.getString("username"),
-                            rs.getString("user_role"),
-                            rs.getString("account_status")
-                    );
-
-                    return Optional.of(user);
+                    return Optional.of(mapUser(rs));
                 }
 
                 return Optional.empty();
@@ -135,21 +101,49 @@ public class UserDao {
     }
 
     /**
-     * Retrieves a user using their ID.
+     * Returns all registered accounts, regardless of role or status.
      */
-    public Optional<User> findById(int userId)
+    public List<User> getAllUsers() throws SQLException {
+
+        String sql = """
+                SELECT user_id, full_name, username,
+                       user_role, account_status
+                FROM "user"
+                ORDER BY user_id
+                """;
+
+        return executeUserListQuery(sql);
+    }
+
+    /**
+     * Returns all accounts that are awaiting approval.
+     */
+    public List<User> getPendingUsers() throws SQLException {
+
+        String sql = """
+                SELECT user_id, full_name, username,
+                       user_role, account_status
+                FROM "user"
+                WHERE account_status = 'PENDING'
+                ORDER BY user_id
+                """;
+
+        return executeUserListQuery(sql);
+    }
+
+    /**
+     * Approves an account only if its current status is PENDING.
+     *
+     * @return true if exactly one account was approved
+     */
+    public boolean approveUser(int userId)
             throws SQLException {
 
         String sql = """
-                SELECT
-                    user_id,
-                    full_name,
-                    username,
-                    user_role,
-                    account_status
-                FROM "user"
+                UPDATE "user"
+                SET account_status = 'APPROVED'
                 WHERE user_id = ?
-                LIMIT 1
+                  AND account_status = 'PENDING'
                 """;
 
         try (Connection connection =
@@ -159,80 +153,38 @@ public class UserDao {
 
             ps.setInt(1, userId);
 
-            try (ResultSet rs = ps.executeQuery()) {
-
-                if (rs.next()) {
-
-                    return Optional.of(
-                            new User(
-                                    rs.getInt("user_id"),
-                                    rs.getString("full_name"),
-                                    rs.getString("username"),
-                                    rs.getString("user_role"),
-                                    rs.getString("account_status")
-                            )
-                    );
-                }
-
-                return Optional.empty();
-            }
+            return ps.executeUpdate() == 1;
         }
     }
 
-    /**
-     * Updates a user's account status.
-     */
-    public boolean updateAccountStatus(
-            int userId,
-            String accountStatus
-    ) throws SQLException {
+    private List<User> executeUserListQuery(String sql)
+            throws SQLException {
 
-        if (!isValidAccountStatus(accountStatus)) {
-            throw new IllegalArgumentException(
-                    "Invalid account status. Allowed statuses: "
-                            + "PENDING, ACTIVE, INACTIVE."
-            );
-        }
-
-        String sql = """
-                UPDATE "user"
-                SET account_status = ?
-                WHERE user_id = ?
-                """;
+        List<User> users = new ArrayList<>();
 
         try (Connection connection =
                      DatabaseConnection.getConnection();
              PreparedStatement ps =
-                     connection.prepareStatement(sql)) {
+                     connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
 
-            ps.setString(1, accountStatus);
-            ps.setInt(2, userId);
-
-            return ps.executeUpdate() > 0;
+            while (rs.next()) {
+                users.add(mapUser(rs));
+            }
         }
+
+        return users;
     }
 
-    /**
-     * Validates the three official system roles.
-     */
-    private boolean isValidRole(String role) {
+    private User mapUser(ResultSet rs)
+            throws SQLException {
 
-        return role != null && (
-                role.equals("ADMIN")
-                        || role.equals("CASHIER")
-                        || role.equals("EVENT COORDINATOR")
-        );
-    }
-
-    /**
-     * Validates account status values.
-     */
-    private boolean isValidAccountStatus(String status) {
-
-        return status != null && (
-                status.equals("PENDING")
-                        || status.equals("ACTIVE")
-                        || status.equals("INACTIVE")
+        return new User(
+                rs.getInt("user_id"),
+                rs.getString("full_name"),
+                rs.getString("username"),
+                rs.getString("user_role"),
+                rs.getString("account_status")
         );
     }
 }

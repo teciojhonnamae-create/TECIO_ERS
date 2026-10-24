@@ -1,4 +1,4 @@
-package com.eventreservation.dao;
+package com.yourdomain.dao;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -8,7 +8,7 @@ import java.sql.Statement;
 public final class DatabaseConnection {
 
     private static final String DB_URL =
-            "jdbc:sqlite:EventReservation.db";
+            "jdbc:sqlite:students.db";
 
     private DatabaseConnection() {
     }
@@ -24,14 +24,10 @@ public final class DatabaseConnection {
 
             statement.execute("PRAGMA foreign_keys = ON");
 
-            try (var resultSet =
-                         statement.executeQuery(
-                                 "PRAGMA foreign_keys"
-                         )) {
+            try (var rs = statement.executeQuery(
+                    "PRAGMA foreign_keys")) {
 
-                if (!resultSet.next()
-                        || resultSet.getInt(1) != 1) {
-
+                if (!rs.next() || rs.getInt(1) != 1) {
                     throw new SQLException(
                             "Failed to enable SQLite foreign keys."
                     );
@@ -41,7 +37,6 @@ public final class DatabaseConnection {
             return connection;
 
         } catch (SQLException e) {
-
             try {
                 connection.close();
             } catch (SQLException closeException) {
