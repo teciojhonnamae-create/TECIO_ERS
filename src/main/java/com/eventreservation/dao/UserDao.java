@@ -1,3 +1,4 @@
+
 package com.yourdomain.dao;
 
 import com.yourdomain.model.User;
@@ -9,9 +10,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Locale;
 
 public class UserDao {
 
+    // Check whether a username already exists.
     public boolean usernameExists(String username)
             throws SQLException {
 
@@ -35,6 +38,7 @@ public class UserDao {
         }
     }
 
+    // Register a new user.
     public void register(
             String fullName,
             String username,
@@ -67,6 +71,7 @@ public class UserDao {
         }
     }
 
+    // Login user.
     public Optional<User> login(
             String username,
             String password
@@ -100,9 +105,7 @@ public class UserDao {
         }
     }
 
-    /**
-     * Returns all registered accounts, regardless of role or status.
-     */
+    // Retrieve all registered users.
     public List<User> getAllUsers() throws SQLException {
 
         String sql = """
@@ -115,9 +118,7 @@ public class UserDao {
         return executeUserListQuery(sql);
     }
 
-    /**
-     * Returns all accounts that are awaiting approval.
-     */
+    // Retrieve all pending users.
     public List<User> getPendingUsers() throws SQLException {
 
         String sql = """
@@ -131,11 +132,7 @@ public class UserDao {
         return executeUserListQuery(sql);
     }
 
-    /**
-     * Approves an account only if its current status is PENDING.
-     *
-     * @return true if exactly one account was approved
-     */
+    // Approve a pending user account.
     public boolean approveUser(int userId)
             throws SQLException {
 
@@ -157,6 +154,43 @@ public class UserDao {
         }
     }
 
+    // NEW METHOD:
+    // Update the selected user's role and account status.
+    public boolean updateUserRoleAndStatus(
+            int userId,
+            String newRole,
+            String newStatus
+    ) throws SQLException {
+
+        if (newRole == null || newStatus == null) {
+            throw new IllegalArgumentException(
+                    "Role and status cannot be null."
+            );
+        }
+
+        newRole = newRole.trim().toUpperCase(Locale.ROOT);
+        newStatus = newStatus.trim().toUpperCase(Locale.ROOT);
+
+        String sql = """
+                UPDATE "user"
+                SET user_role = ?, account_status = ?
+                WHERE user_id = ?
+                """;
+
+        try (Connection connection =
+                     DatabaseConnection.getConnection();
+             PreparedStatement ps =
+                     connection.prepareStatement(sql)) {
+
+            ps.setString(1, newRole);
+            ps.setString(2, newStatus);
+            ps.setInt(3, userId);
+
+            return ps.executeUpdate() == 1;
+        }
+    }
+
+    // Execute queries that return a list of users.
     private List<User> executeUserListQuery(String sql)
             throws SQLException {
 
@@ -176,6 +210,7 @@ public class UserDao {
         return users;
     }
 
+    // Convert database records into User objects.
     private User mapUser(ResultSet rs)
             throws SQLException {
 

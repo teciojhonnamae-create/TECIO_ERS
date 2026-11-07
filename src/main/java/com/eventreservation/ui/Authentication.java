@@ -1,3 +1,4 @@
+
 package com.yourdomain.ui;
 
 import com.yourdomain.dao.UserDao;
@@ -13,14 +14,17 @@ public class Authentication {
     private final UserDao userDao;
     private final Scanner scanner;
 
+    // Username must contain 4-20 letters, numbers, underscores or dots.
     private static final Pattern USERNAME_PATTERN =
             Pattern.compile("^[A-Za-z0-9_.]{4,20}$");
 
+    // Constructor
     public Authentication(UserDao userDao, Scanner scanner) {
         this.userDao = userDao;
         this.scanner = scanner;
     }
 
+    // Main authentication menu
     public void start() {
 
         boolean running = true;
@@ -28,9 +32,7 @@ public class Authentication {
         while (running) {
 
             System.out.println();
-            System.out.println(
-                    "===== EVENT RESERVATION SYSTEM ====="
-            );
+            System.out.println("===== EVENT RESERVATION SYSTEM =====");
             System.out.println("1. Register Account");
             System.out.println("2. Login");
             System.out.println("3. Exit");
@@ -39,14 +41,18 @@ public class Authentication {
             String choice = scanner.nextLine().trim();
 
             switch (choice) {
+
                 case "1" -> registerAccount();
+
                 case "2" -> login();
+
                 case "3" -> {
                     System.out.println(
                             "Application closed. Goodbye!"
                     );
                     running = false;
                 }
+
                 default -> System.out.println(
                         "Invalid choice. Enter 1, 2, or 3."
                 );
@@ -54,6 +60,7 @@ public class Authentication {
         }
     }
 
+    // Register a new account
     private void registerAccount() {
 
         System.out.println();
@@ -61,11 +68,12 @@ public class Authentication {
 
         String fullName = ask("Full name: ").trim();
 
-        if (fullName.length() < 2
-                || fullName.length() > 80) {
+        if (fullName.length() < 2 || fullName.length() > 80) {
+
             System.out.println(
                     "Full name must be 2 to 80 characters."
             );
+
             return;
         }
 
@@ -74,9 +82,11 @@ public class Authentication {
         ).trim();
 
         if (!USERNAME_PATTERN.matcher(username).matches()) {
+
             System.out.println(
                     "Invalid username format."
             );
+
             return;
         }
 
@@ -85,9 +95,11 @@ public class Authentication {
         );
 
         if (password.length() < 8) {
+
             System.out.println(
                     "Password must be at least 8 characters."
             );
+
             return;
         }
 
@@ -95,9 +107,11 @@ public class Authentication {
                 ask("Confirm password: ");
 
         if (!password.equals(confirmPassword)) {
+
             System.out.println(
                     "Passwords do not match."
             );
+
             return;
         }
 
@@ -110,22 +124,33 @@ public class Authentication {
         String roleChoice = ask("Role: ").trim();
 
         String role = switch (roleChoice) {
+
             case "1" -> "ADMIN";
+
             case "2" -> "CASHIER";
+
             case "3" -> "EVENT COORDINATOR";
+
             default -> null;
         };
 
         if (role == null) {
-            System.out.println("Invalid role selection.");
+
+            System.out.println(
+                    "Invalid role selection."
+            );
+
             return;
         }
 
         try {
+
             if (userDao.usernameExists(username)) {
+
                 System.out.println(
                         "Registration failed: username already exists."
                 );
+
                 return;
             }
 
@@ -140,18 +165,21 @@ public class Authentication {
             System.out.println("Registration successful!");
             System.out.println("Assigned role: " + role);
             System.out.println("Account status: PENDING");
+
             System.out.println(
                     "Please wait for an administrator to approve "
                             + "your account before logging in."
             );
 
         } catch (SQLException e) {
+
             System.out.println(
                     "Could not register account: " + e.getMessage()
             );
         }
     }
 
+    // Login an existing user
     private void login() {
 
         System.out.println();
@@ -161,25 +189,31 @@ public class Authentication {
         String password = ask("Password: ");
 
         if (username.isBlank() || password.isBlank()) {
+
             System.out.println(
                     "Username and password are required."
             );
+
             return;
         }
 
         try {
+
             Optional<User> result =
                     userDao.login(username, password);
 
             if (result.isEmpty()) {
+
                 System.out.println(
                         "Login failed: incorrect username or password."
                 );
+
                 return;
             }
 
             User currentUser = result.get();
 
+            // Check account approval status.
             if (!"APPROVED".equalsIgnoreCase(
                     currentUser.accountStatus())) {
 
@@ -191,21 +225,26 @@ public class Authentication {
                 System.out.println(
                         "Please contact the system administrator."
                 );
+
                 return;
             }
 
             System.out.println();
             System.out.println("Login successful!");
+
             System.out.println(
                     "Welcome, " + currentUser.fullName() + "!"
             );
+
             System.out.println(
                     "Role: " + currentUser.userRole()
             );
 
+            // Direct the user to the correct menu.
             routeUser(currentUser);
 
         } catch (SQLException e) {
+
             System.out.println(
                     "Could not verify login details: "
                             + e.getMessage()
@@ -213,21 +252,26 @@ public class Authentication {
         }
     }
 
+    // Role-based navigation
     private void routeUser(User user) {
 
         switch (user.userRole()) {
 
             case "ADMIN" -> new AdminMenu(
-                    userDao, scanner
+                    userDao,
+                    scanner,
+                    user
             ).start();
 
             case "CASHIER" -> new CashierMenu(
-                    user, scanner
+                    user,
+                    scanner
             ).start();
 
             case "EVENT COORDINATOR" ->
                     new EventCoordinatorMenu(
-                            user, scanner
+                            user,
+                            scanner
                     ).start();
 
             default -> System.out.println(
@@ -236,8 +280,12 @@ public class Authentication {
         }
     }
 
+    // Ask the user for input.
     private String ask(String prompt) {
+
         System.out.print(prompt);
+
         return scanner.nextLine();
     }
+
 }
