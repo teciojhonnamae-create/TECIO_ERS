@@ -37,6 +37,7 @@ public final class DatabaseConnection {
             return connection;
 
         } catch (SQLException e) {
+
             try {
                 connection.close();
             } catch (SQLException closeException) {

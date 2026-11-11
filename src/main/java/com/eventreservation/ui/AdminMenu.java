@@ -1,8 +1,9 @@
-
 package com.yourdomain.ui;
 
 import com.yourdomain.dao.UserDao;
+import com.yourdomain.dao.ActivityLogDao;
 import com.yourdomain.model.User;
+import com.yourdomain.model.ActivityLog;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -12,21 +13,26 @@ import java.util.Scanner;
 public class AdminMenu {
 
     private final UserDao userDao;
+    private final ActivityLogDao activityLogDao;
     private final Scanner scanner;
     private final User currentAdmin;
 
-    // Constructor
     public AdminMenu(
             UserDao userDao,
+            ActivityLogDao activityLogDao,
             Scanner scanner,
             User currentAdmin
     ) {
         this.userDao = userDao;
+        this.activityLogDao = activityLogDao;
         this.scanner = scanner;
         this.currentAdmin = currentAdmin;
     }
 
-    // Main admin menu
+    // ==========================================
+    // MAIN ADMIN MENU
+    // ==========================================
+
     public void start() {
 
         boolean running = true;
@@ -35,11 +41,14 @@ public class AdminMenu {
 
             System.out.println();
             System.out.println("===== ADMIN MENU =====");
+
             System.out.println("1. View All System Users");
             System.out.println("2. View Pending Registrations");
             System.out.println("3. Approve User Account");
             System.out.println("4. Update User");
             System.out.println("5. Logout");
+            System.out.println("6. View System Audit Logs");
+
             System.out.print("Choose an option: ");
 
             String choice = scanner.nextLine().trim();
@@ -55,18 +64,28 @@ public class AdminMenu {
                 case "4" -> updateUser();
 
                 case "5" -> {
-                    System.out.println("Admin logged out.");
+                    recordLogout();
+
+                    System.out.println(
+                            "Admin logged out successfully."
+                    );
+
                     running = false;
                 }
 
+                case "6" -> auditLogMenu();
+
                 default -> System.out.println(
-                        "Invalid choice. Enter 1, 2, 3, 4, or 5."
+                        "Invalid choice. Enter 1, 2, 3, 4, 5, or 6."
                 );
             }
         }
     }
 
-    // Display all registered users.
+    // ==========================================
+    // VIEW ALL USERS
+    // ==========================================
+
     private void viewAllUsers() {
 
         try {
@@ -86,7 +105,10 @@ public class AdminMenu {
         }
     }
 
-    // Display pending registrations.
+    // ==========================================
+    // VIEW PENDING USERS
+    // ==========================================
+
     private void viewPendingUsers() {
 
         try {
@@ -107,7 +129,10 @@ public class AdminMenu {
         }
     }
 
-    // Approve a pending account.
+    // ==========================================
+    // APPROVE USER ACCOUNT
+    // ==========================================
+
     private void approveUserAccount() {
 
         try {
@@ -130,6 +155,7 @@ public class AdminMenu {
             displayUsers(pendingUsers);
 
             System.out.println("Enter 0 to cancel.");
+
             int targetUserId = readIntInput(
                     "Enter Target User ID: "
             );
@@ -152,8 +178,7 @@ public class AdminMenu {
             if (!isPending) {
 
                 System.out.println(
-                        "Approval failed: User ID not found "
-                                + "in pending registrations."
+                        "User ID not found in pending registrations."
                 );
 
                 return;
@@ -176,6 +201,13 @@ public class AdminMenu {
                         "New status: APPROVED"
                 );
 
+                recordAuditAction(
+                        "USER_APPROVED",
+                        "Admin [" + currentAdmin.userId()
+                                + "] approved account for User ID "
+                                + targetUserId + "."
+                );
+
             } else {
 
                 System.out.println(
@@ -192,8 +224,10 @@ public class AdminMenu {
         }
     }
 
-    // NEW FEATURE:
-    // Update another user's role and account status.
+    // ==========================================
+    // UPDATE USER ACCOUNT
+    // ==========================================
+
     private void updateUser() {
 
         try {
@@ -201,7 +235,6 @@ public class AdminMenu {
             System.out.println();
             System.out.println("===== UPDATE USER =====");
 
-            // Step 1: Display all registered users.
             List<User> users = userDao.getAllUsers();
 
             if (users.isEmpty()) {
@@ -216,25 +249,27 @@ public class AdminMenu {
             displayUsers(users);
 
             System.out.println(
-                    "Enter 0 at any step to cancel the update."
+                    "Enter 0 to cancel the update."
             );
 
-            // Step 2: Ask for the target user ID.
             int targetUserId = readIntInput(
                     "Enter Target User ID: "
             );
 
             if (targetUserId == 0) {
+
                 System.out.println("Update cancelled.");
+
                 return;
             }
 
             if (targetUserId < 1) {
+
                 System.out.println("Invalid user ID.");
+
                 return;
             }
 
-            // Step 3: Check whether the user exists.
             User targetUser = users.stream()
                     .filter(user ->
                             user.userId() == targetUserId
@@ -251,25 +286,17 @@ public class AdminMenu {
                 return;
             }
 
-            // Step 4: Security restriction.
-            // An admin cannot modify their own account.
+            // Admin can now update their own account.
             if (targetUserId == currentAdmin.userId()) {
 
                 System.out.println();
                 System.out.println(
-                        "WARNING: Modifying the currently active "
-                                + "admin account is restricted."
+                        "You are updating your own administrator account."
                 );
-
-                System.out.println(
-                        "You cannot update your own account."
-                );
-
-                return;
             }
 
-            // Step 5: Ask for the new role.
             System.out.println();
+
             System.out.println(
                     "Current Role: " + targetUser.userRole()
             );
@@ -277,12 +304,14 @@ public class AdminMenu {
             String newRole = readValidRole();
 
             if (newRole == null) {
+
                 System.out.println("Update cancelled.");
+
                 return;
             }
 
-            // Step 6: Ask for the new account status.
             System.out.println();
+
             System.out.println(
                     "Current Status: " + targetUser.accountStatus()
             );
@@ -290,25 +319,55 @@ public class AdminMenu {
             String newStatus = readValidStatus();
 
             if (newStatus == null) {
+
                 System.out.println("Update cancelled.");
+
                 return;
             }
 
-            // Step 7: Confirm the update.
+            // Display update summary.
             System.out.println();
             System.out.println("===== UPDATE SUMMARY =====");
-            System.out.println("User ID: " + targetUserId);
-            System.out.println("Username: " + targetUser.username());
+
+            System.out.println(
+                    "User ID: " + targetUserId
+            );
+
+            System.out.println(
+                    "Username: " + targetUser.username()
+            );
+
             System.out.println(
                     "Old Role: " + targetUser.userRole()
             );
-            System.out.println("New Role: " + newRole);
+
+            System.out.println(
+                    "New Role: " + newRole
+            );
+
             System.out.println(
                     "Old Status: " + targetUser.accountStatus()
             );
-            System.out.println("New Status: " + newStatus);
 
-            // Step 8: Update the database.
+            System.out.println(
+                    "New Status: " + newStatus
+            );
+
+            System.out.print(
+                    "Confirm update? (Y/N): "
+            );
+
+            String confirmation =
+                    scanner.nextLine().trim();
+
+            if (!confirmation.equalsIgnoreCase("Y")) {
+
+                System.out.println("Update cancelled.");
+
+                return;
+            }
+
+            // SAVE CHANGES TO DATABASE.
             boolean updated =
                     userDao.updateUserRoleAndStatus(
                             targetUserId,
@@ -319,12 +378,15 @@ public class AdminMenu {
             if (updated) {
 
                 System.out.println();
+
                 System.out.println(
                         "======================================"
                 );
+
                 System.out.println(
                         "USER UPDATED SUCCESSFULLY!"
                 );
+
                 System.out.println(
                         "======================================"
                 );
@@ -341,6 +403,35 @@ public class AdminMenu {
                         "Updated Status: " + newStatus
                 );
 
+                // RECORD THE SUCCESSFUL UPDATE.
+                recordAuditAction(
+                        "USER_UPDATED",
+                        "Admin [" + currentAdmin.userId()
+                                + "] updated User ID "
+                                + targetUserId
+                                + ": Role "
+                                + targetUser.userRole()
+                                + " -> " + newRole
+                                + ", Status "
+                                + targetUser.accountStatus()
+                                + " -> " + newStatus + "."
+                );
+
+                if (targetUserId == currentAdmin.userId()) {
+
+                    System.out.println();
+
+                    System.out.println(
+                            "NOTICE: Your current session remains "
+                                    + "active until you log out."
+                    );
+
+                    System.out.println(
+                            "Your new role/status will be checked "
+                                    + "again during your next login."
+                    );
+                }
+
             } else {
 
                 System.out.println(
@@ -356,8 +447,279 @@ public class AdminMenu {
         }
     }
 
-    // INPUT VALIDATION WRAPPER 1:
-    // Accept only numeric input.
+    // ==========================================
+    // AUDIT LOG MENU
+    // ==========================================
+
+    private void auditLogMenu() {
+
+        boolean running = true;
+
+        while (running) {
+
+            System.out.println();
+            System.out.println(
+                    "===== SYSTEM AUDIT LOG MENU ====="
+            );
+
+            System.out.println("1. View All System Logs");
+            System.out.println("2. Filter Logs by User ID");
+            System.out.println("3. Clear Historical Logs");
+            System.out.println("4. Back to Admin Menu");
+
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine().trim();
+
+            switch (choice) {
+
+                case "1" -> viewAllSystemLogs();
+
+                case "2" -> filterLogsByUserId();
+
+                case "3" -> clearHistoricalLogs();
+
+                case "4" -> running = false;
+
+                default -> System.out.println(
+                        "Invalid choice. Enter 1, 2, 3, or 4."
+                );
+            }
+        }
+    }
+
+    // ==========================================
+    // VIEW ALL LOGS
+    // ==========================================
+
+    private void viewAllSystemLogs() {
+
+        try {
+
+            List<ActivityLog> logs =
+                    activityLogDao.getAllLogs();
+
+            System.out.println();
+            System.out.println("===== ALL SYSTEM AUDIT LOGS =====");
+
+            displayLogs(logs);
+
+        } catch (SQLException e) {
+
+            System.out.println(
+                    "Could not retrieve logs: " + e.getMessage()
+            );
+        }
+    }
+
+    // ==========================================
+    // FILTER LOGS BY USER ID
+    // ==========================================
+
+    private void filterLogsByUserId() {
+
+        try {
+
+            System.out.println();
+            System.out.println("===== FILTER LOGS BY USER ID =====");
+
+            System.out.println("Enter 0 to cancel.");
+
+            int userId = readIntInput(
+                    "Enter User ID: "
+            );
+
+            if (userId == 0) {
+
+                System.out.println("Filtering cancelled.");
+
+                return;
+            }
+
+            if (userId < 1) {
+
+                System.out.println("Invalid User ID.");
+
+                return;
+            }
+
+            List<ActivityLog> logs =
+                    activityLogDao.getLogsByUserId(userId);
+
+            System.out.println();
+
+            System.out.println(
+                    "===== AUDIT LOGS FOR USER ID: "
+                            + userId + " ====="
+            );
+
+            displayLogs(logs);
+
+        } catch (SQLException e) {
+
+            System.out.println(
+                    "Could not filter logs: " + e.getMessage()
+            );
+        }
+    }
+
+    // ==========================================
+    // CLEAR HISTORICAL LOGS
+    // ==========================================
+
+    private void clearHistoricalLogs() {
+
+        System.out.println();
+
+        System.out.println(
+                "WARNING: This will delete historical audit logs."
+        );
+
+        System.out.println(
+                "The new LOGS_CLEARED record will be retained."
+        );
+
+        System.out.print(
+                "Continue? (Y/N): "
+        );
+
+        String confirmation =
+                scanner.nextLine().trim();
+
+        if (!confirmation.equalsIgnoreCase("Y")) {
+
+            System.out.println("Operation cancelled.");
+
+            return;
+        }
+
+        try {
+
+            int deletedCount =
+                    activityLogDao.clearAllLogs(
+                            currentAdmin.userId()
+                    );
+
+            System.out.println(
+                    "Historical logs cleared successfully."
+            );
+
+            System.out.println(
+                    "Deleted records: " + deletedCount
+            );
+
+            System.out.println(
+                    "LOGS_CLEARED record saved."
+            );
+
+        } catch (SQLException e) {
+
+            System.out.println(
+                    "Could not clear logs: " + e.getMessage()
+            );
+        }
+    }
+
+    // ==========================================
+    // RECORD AUDIT ACTION
+    // ==========================================
+
+    private void recordAuditAction(
+            String actionType,
+            String description
+    ) {
+
+        try {
+
+            activityLogDao.logAction(
+                    currentAdmin.userId(),
+                    actionType,
+                    description
+            );
+
+            System.out.println(
+                    "Activity recorded in system audit logs."
+            );
+
+        } catch (SQLException e) {
+
+            System.out.println(
+                    "WARNING: Could not save audit log: "
+                            + e.getMessage()
+            );
+        }
+    }
+
+    // ==========================================
+    // RECORD ADMIN LOGOUT
+    // ==========================================
+
+    private void recordLogout() {
+
+        recordAuditAction(
+                "USER_LOGOUT",
+                "ADMIN [" + currentAdmin.userId()
+                        + "] logged out of the system."
+        );
+    }
+
+    // ==========================================
+    // DISPLAY AUDIT LOGS
+    // ==========================================
+
+    private void displayLogs(List<ActivityLog> logs) {
+
+        String border =
+                "+-------+----------+--------------------+"
+                        + "-------------------------------------+"
+                        + "----------------------+";
+
+        System.out.println(border);
+
+        System.out.printf(
+                "| %-5s | %-8s | %-18s | %-35s | %-20s |%n",
+                "Log ID",
+                "User ID",
+                "Action Type",
+                "Description",
+                "Timestamp"
+        );
+
+        System.out.println(border);
+
+        if (logs.isEmpty()) {
+
+            System.out.printf(
+                    "| %-84s |%n",
+                    "No activity logs found."
+            );
+
+        } else {
+
+            for (ActivityLog log : logs) {
+
+                System.out.printf(
+                        "| %-5d | %-8d | %-18.18s | %-35.35s | %-20.20s |%n",
+                        log.logId(),
+                        log.userId(),
+                        log.actionType(),
+                        log.description(),
+                        log.timestamp()
+                );
+            }
+        }
+
+        System.out.println(border);
+
+        System.out.println(
+                "Total records: " + logs.size()
+        );
+    }
+
+    // ==========================================
+    // INPUT VALIDATION: INTEGER
+    // ==========================================
+
     private int readIntInput(String prompt) {
 
         while (true) {
@@ -379,14 +741,17 @@ public class AdminMenu {
         }
     }
 
-    // INPUT VALIDATION WRAPPER 2:
-    // Accept only existing system roles.
+    // ==========================================
+    // INPUT VALIDATION: ROLE
+    // ==========================================
+
     private String readValidRole() {
 
         while (true) {
 
             System.out.println();
             System.out.println("Available Roles:");
+
             System.out.println("1. ADMIN");
             System.out.println("2. CASHIER");
             System.out.println("3. EVENT COORDINATOR");
@@ -417,23 +782,26 @@ public class AdminMenu {
                 }
 
                 default -> System.out.println(
-                        "Invalid role! Choose ADMIN, CASHIER, "
-                                + "or EVENT COORDINATOR."
+                        "Invalid role selection."
                 );
             }
         }
     }
 
-    // INPUT VALIDATION WRAPPER 3:
-    // Accept only APPROVED or PENDING.
+    // ==========================================
+    // INPUT VALIDATION: ACCOUNT STATUS
+    // ==========================================
+
     private String readValidStatus() {
 
         while (true) {
 
             System.out.println();
             System.out.println("Available Account Status:");
+
             System.out.println("1. APPROVED");
             System.out.println("2. PENDING");
+            System.out.println("3. INACTIVE");
             System.out.println("0. Cancel");
 
             System.out.print("Enter New Status: ");
@@ -456,18 +824,26 @@ public class AdminMenu {
                     return "PENDING";
                 }
 
+                case "3", "INACTIVE" -> {
+                    return "INACTIVE";
+                }
+
                 default -> System.out.println(
-                        "Invalid status! Enter APPROVED or PENDING."
+                        "Invalid status selection."
                 );
             }
         }
     }
 
-    // Display users in a console table.
+    // ==========================================
+    // DISPLAY USERS
+    // ==========================================
+
     private void displayUsers(List<User> users) {
 
         String border =
-                "+------+----------------------+----------------------+----------------------+------------+";
+                "+------+----------------------+----------------------+"
+                        + "----------------------+------------+";
 
         System.out.println(border);
 

@@ -14,8 +14,10 @@ public final class DatabaseInitializer {
         try (Connection connection =
                      DatabaseConnection.getConnection()) {
 
+            // Step 1: Migrate the existing USER table if necessary.
             migrateUserTableIfNecessary(connection);
 
+            // Step 2: Create the USER table.
             String createUserTable = """
                     CREATE TABLE IF NOT EXISTS "user" (
                         user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,20 +45,60 @@ public final class DatabaseInitializer {
                     )
                     """;
 
+            // Step 3: Create the ACTIVITY_LOGS table.
+            String createActivityLogsTable = """
+                    CREATE TABLE IF NOT EXISTS activity_logs (
+                        log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                        user_id INTEGER NOT NULL,
+
+                        action_type TEXT NOT NULL,
+
+                        description TEXT NOT NULL,
+
+                        timestamp TEXT NOT NULL
+                            DEFAULT CURRENT_TIMESTAMP,
+
+                        FOREIGN KEY (user_id)
+                            REFERENCES "user"(user_id)
+                    )
+                    """;
+
             try (Statement statement =
                          connection.createStatement()) {
 
                 statement.execute(createUserTable);
+
+                statement.execute(createActivityLogsTable);
+
+                // Step 4: Create an index for user ID filtering.
+                statement.execute("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_activity_logs_user_id
+                        ON activity_logs(user_id)
+                        """);
+
+                // Step 5: Create an index for timestamp sorting.
+                statement.execute("""
+                        CREATE INDEX IF NOT EXISTS
+                        idx_activity_logs_timestamp
+                        ON activity_logs(timestamp)
+                        """);
             }
 
             System.out.println(
                     "Database initialization completed successfully."
             );
+
+            System.out.println(
+                    "Activity logging system initialized successfully."
+            );
         }
     }
 
     private static void migrateUserTableIfNecessary(
-            Connection connection) throws SQLException {
+            Connection connection
+    ) throws SQLException {
 
         String tableSql = null;
 
@@ -66,6 +108,7 @@ public final class DatabaseInitializer {
                 WHERE type = 'table'
                   AND name = 'user'
                 """);
+
              var rs = ps.executeQuery()) {
 
             if (rs.next()) {
@@ -83,9 +126,11 @@ public final class DatabaseInitializer {
             return;
         }
 
-        boolean originalAutoCommit = connection.getAutoCommit();
+        boolean originalAutoCommit =
+                connection.getAutoCommit();
 
         try {
+
             connection.setAutoCommit(false);
 
             try (Statement statement =
@@ -164,6 +209,7 @@ public final class DatabaseInitializer {
             throw e;
 
         } finally {
+
             connection.setAutoCommit(originalAutoCommit);
         }
     }
